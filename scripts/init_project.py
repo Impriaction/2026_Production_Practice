@@ -14,7 +14,6 @@ from od_platform.common.logging_utils import log_execution_time
 logger = logging.getLogger("od_platform")
 
 
-
 def main() -> None:
     initialize_project()
 
