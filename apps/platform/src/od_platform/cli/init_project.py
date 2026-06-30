@@ -4,14 +4,7 @@
 # @Author    : 雨霓同学
 # @Project   : ODPlatform
 # @Function  : 项目自动初始化——目录创建 + 数据集状态检查
-import sys
-from pathlib import Path
 
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-##以上是通用的调用的头，以便于找到项目根目录下的 src 目录,从而导入 od_platform 包
 import logging
 from pathlib import Path
 from typing import List
