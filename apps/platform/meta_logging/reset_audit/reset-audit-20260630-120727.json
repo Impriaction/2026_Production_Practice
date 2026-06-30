@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-06-30T12:07:27",
+  "mode": "preview",
+  "scope": "runtime",
+  "dry_run": true,
+  "user": "wulinjun",
+  "host": "WIN-9TBP8M6OPID",
+  "targets": [
+    "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\runs",
+    "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\models\\trained",
+    "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\data\\processed",
+    "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\apps\\platform\\logging"
+  ],
+  "summary": {
+    "items": [
+      {
+        "path": "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\runs",
+        "exists": true,
+        "files": 0,
+        "dirs": 1,
+        "bytes": 0,
+        "display_size": "0 B"
+      },
+      {
+        "path": "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\models\\trained",
+        "exists": true,
+        "files": 0,
+        "dirs": 1,
+        "bytes": 0,
+        "display_size": "0 B"
+      },
+      {
+        "path": "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\data\\processed",
+        "exists": true,
+        "files": 0,
+        "dirs": 1,
+        "bytes": 0,
+        "display_size": "0 B"
+      },
+      {
+        "path": "D:\\MyCode\\2026_Production_Practice\\ODPlatform\\apps\\platform\\logging",
+        "exists": true,
+        "files": 17,
+        "dirs": 1,
+        "bytes": 55658,
+        "display_size": "54.35 KB"
+      }
+    ],
+    "total_files": 17,
+    "total_dirs": 4,
+    "total_bytes": 55658,
+    "display_total_size": "54.35 KB"
+  },
+  "backup_archive": null,
+  "deleted_paths": [],
+  "errors": []
+}
