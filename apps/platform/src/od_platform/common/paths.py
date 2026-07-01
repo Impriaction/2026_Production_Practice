@@ -7,14 +7,17 @@
 # @Function  :定义所有的路径变量信息，方便其他模块调用
 
 from pathlib import Path
-from typing import  List, Tuple
+from typing import List, Tuple
+
 
 # 找到Workspace根目录
 WORKSPACE_MARKER: str = ".odp-workspace"
 
-def _find_workspace_root(start: Path,
-                markers: Tuple[str, ...] = (WORKSPACE_MARKER,)
-                ) -> Path:
+
+def _find_workspace_root(
+    start: Path,
+    markers: Tuple[str, ...] = (WORKSPACE_MARKER,),
+) -> Path:
     current = start.resolve()
     if current.is_file():
         current = current.parent
@@ -22,8 +25,10 @@ def _find_workspace_root(start: Path,
         for marker in markers:
             if (parent / marker).exists():
                 return parent
-    raise FileNotFoundError(f"找不到workspace marker文件 ({markers})"
-                            f"请确认仓库根目录已存在 {WORKSPACE_MARKER} 文件")
+    raise FileNotFoundError(
+        f"找不到workspace marker文件 ({markers})"
+        f"请确认仓库根目录已存在 {WORKSPACE_MARKER} 文件"
+    )
 
 
 # 计算ROOT_DIR位置
@@ -47,6 +52,7 @@ PROCESSED_DATA_DIR: Path = DATA_DIR / "processed"  # 派生的数据集,含冻�
 
 # 端私有资产
 CONFIGS_DIR: Path = APP_DIR / "configs"
+DATASET_CONFIGS_DIR: Path = CONFIGS_DIR / "datasets"
 LOGGING_DIR: Path = APP_DIR / "logging"
 UNIT_TEST_DIR: Path = APP_DIR / "tests"
 
@@ -57,8 +63,9 @@ DOCS_DIR: Path = ROOT_DIR / "docs"
 SCRIPTS_DIR: Path = ROOT_DIR / "scripts"
 
 # 元工具数据目录 / 工具自身的一些日志
-META_DIR: Path = ROOT_DIR / '.odp-meta'
+META_DIR: Path = ROOT_DIR / ".odp-meta"
 META_LOGGING_DIR: Path = META_DIR / "logging"
+
 
 # 对外暴露的要初始化的目录列表
 def get_dirs_to_initialize() -> List[Path]:
@@ -75,8 +82,10 @@ def get_dirs_to_initialize() -> List[Path]:
         UNIT_TEST_DIR,
         DOCS_DIR,
         SCRIPTS_DIR,
-        META_LOGGING_DIR
+        META_LOGGING_DIR,
+        DATASET_CONFIGS_DIR,
     ]
+
 
 def get_dirs_to_reset() -> List[Path]:
     """返回reset_project可以安全清理的目录列表"""
@@ -88,21 +97,23 @@ def get_dirs_to_reset() -> List[Path]:
         TRAINED_MODELS_DIR,
     ]
 
+
 # 绝对保护目录：reset工具永远不能删除这些内容
-PROTECTED_DIRS: tuple[Path,...] = (
+PROTECTED_DIRS: tuple[Path, ...] = (
     ROOT_DIR,
     APP_DIR,
     SCRIPTS_DIR,
     DOCS_DIR,
     UNIT_TEST_DIR,
-    ROOT_DIR / '.git',
+    ROOT_DIR / ".git",
     ROOT_DIR / WORKSPACE_MARKER,
     RAW_DATA_DIR,
     PRETRAINED_MODELS_DIR,
-    APP_DIR / 'src',
+    APP_DIR / "src",
     META_DIR,
     META_LOGGING_DIR,
 )
+
 
 def is_protected(path: Path) -> bool:
     """
@@ -121,7 +132,18 @@ def is_protected(path: Path) -> bool:
     return False
 
 
+def dataset_processed_dir(name: str) -> Path:
+    """某数据集的派生根: data/processed/<name>/。
 
+    按数据集分桶(每个数据集独占一个根),多数据集互不覆盖——这是把 train/val/test
+    放进各自命名空间的关键。
+    """
+    return PROCESSED_DATA_DIR / name
+
+
+def dataset_yaml_path(name: str) -> Path:
+    """某数据集生成的 ultralytics yaml 路径: configs/datasets/<name>.yaml。"""
+    return DATASET_CONFIGS_DIR / f"{name}.yaml"
 
 
 if __name__ == "__main__":
@@ -139,13 +161,3 @@ if __name__ == "__main__":
     print(f"UNIT TEST DIR = {UNIT_TEST_DIR}")
     for d in get_dirs_to_initialize():
         print(f"将要初始化的目录有: {d.relative_to(ROOT_DIR)}")
-
-
-
-
-
-
-
-
-
-
