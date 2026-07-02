@@ -6,7 +6,7 @@ from od_platform.validate_dataset.registry import (
 )
 
 
-@check("冒烟测试")
+@check("冒烟测试", order=999)
 def placeholder_check(ctx: CheckContext) -> CheckResult:
     """冒烟测试。"""
 

@@ -4,7 +4,7 @@
 # @Time      :2026/7/2 09:21:32
 # @Author    :雨霓同学
 # @Project   :ODPlatform
-# @Function  :data_validation注册表+数据契约(CheckResult + CheckSeverity + CheckContext)
+# @Function  :data_validation 注册表与共享上下文
 
 from __future__ import annotations
 
@@ -13,17 +13,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
+import yaml
+
 from od_platform.common.registry_utils import import_submodules
+from od_platform.validate_dataset.snapshot import DatasetSnapshot, build_dataset_snapshot
 
 logger = logging.getLogger(__name__)
+SPLIT_NAMES: tuple[str, ...] = ("train", "val", "test")
 
 
-# 1. CheckSeverity - 严重程度
 class CheckSeverity:
-    INFO = "INFO"  # 告知级别: 工程上知道一下, 不阻断
-    WARNING = "WARNING"  # 关注级别: 能继续, 但需要人工 review
-    ERROR = "ERROR"  # 阻塞级别 CI必须听, 训练绝对不能继续
-    PASS = "PASS"  # 通过
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    PASS = "PASS"
 
     _ORDER = {INFO: 1, WARNING: 2, ERROR: 3, PASS: 0}
 
@@ -32,73 +35,116 @@ class CheckSeverity:
         return cls._ORDER.get(level, 0)
 
 
-# 2. CheckResult - 单个 check 的统一返回类型
 @dataclass
 class CheckResult:
     name: str
     severity: str
-    summary: str  # 一句话总结, 供终端日志 / 报告的头部使用, 给人看的
-    details: Dict[str, Any] = field(default_factory=dict)  # 结构化详情字典 - json报告给机器看的
+    summary: str
+    details: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
         return self.severity in (CheckSeverity.PASS, CheckSeverity.INFO)
 
 
-# 3. CheckContext - check函数的入参
 @dataclass
 class CheckContext:
-    """check函数的入参: 所有check函数的签名都是这一个"""
+    """Shared validation context with lazy yaml parsing and split scanning."""
 
     yaml_path: Path
+    _yaml_doc_cache: Dict[str, Any] | None = field(default=None, init=False, repr=False)
+    _dataset_root_cache: Path | None = field(default=None, init=False, repr=False)
+    _split_dirs_cache: Dict[str, Path] | None = field(default=None, init=False, repr=False)
+    _snapshot_cache: DatasetSnapshot | None = field(default=None, init=False, repr=False)
 
+    @property
+    def yaml_loaded(self) -> bool:
+        return self._yaml_doc_cache is not None
 
+    @property
+    def snapshot_loaded(self) -> bool:
+        return self._snapshot_cache is not None
+
+    @property
+    def yaml_doc(self) -> Dict[str, Any]:
+        if self._yaml_doc_cache is None:
+            with self.yaml_path.open("r", encoding="utf-8") as file:
+                doc = yaml.safe_load(file)
+            if not isinstance(doc, dict):
+                raise ValueError(f"yaml top-level must be dict, got {type(doc).__name__}")
+            self._yaml_doc_cache = doc
+        return self._yaml_doc_cache
+
+    @property
+    def dataset_root(self) -> Path:
+        if self._dataset_root_cache is None:
+            path_value = self.yaml_doc.get("path")
+            if not isinstance(path_value, str) or not path_value.strip():
+                raise ValueError("yaml field 'path' must be a non-empty string")
+            self._dataset_root_cache = self._resolve_path(path_value, self.yaml_path.parent)
+        return self._dataset_root_cache
+
+    @property
+    def split_image_dirs(self) -> Dict[str, Path]:
+        if self._split_dirs_cache is None:
+            split_dirs: Dict[str, Path] = {}
+            for split in SPLIT_NAMES:
+                raw_value = self.yaml_doc.get(split)
+                if not isinstance(raw_value, str) or not raw_value.strip():
+                    raise ValueError(f"yaml field '{split}' must be a non-empty string")
+                split_dirs[split] = self._resolve_path(raw_value, self.dataset_root)
+            self._split_dirs_cache = split_dirs
+        return self._split_dirs_cache
+
+    @property
+    def split_snapshot(self) -> DatasetSnapshot:
+        if self._snapshot_cache is None:
+            self._snapshot_cache = build_dataset_snapshot(
+                self.yaml_path,
+                yaml_data=self._yaml_doc_cache,
+            )
+        return self._snapshot_cache
+
+    def _resolve_path(self, raw_path: str, base_dir: Path) -> Path:
+        path = Path(raw_path)
+        if path.is_absolute():
+            return path.resolve()
+        return (base_dir / path).resolve()
 CheckFunc = Callable[[CheckContext], CheckResult]
 
 
-# 4. 注册表条目
 @dataclass(frozen=True)
 class CheckEntry:
-    """注册表中的一条记录。forzen=注册后不可改"""
-
     name: str
     func: CheckFunc
+    order: int = 100
 
     @property
     def check(self) -> CheckFunc:
         return self.func
 
 
-# 模块级别的注册表
 _REGISTRY: Dict[str, CheckEntry] = {}
 
 
-def check(name: str) -> Callable[[CheckFunc], CheckFunc]:
+def check(name: str, *, order: int = 100) -> Callable[[CheckFunc], CheckFunc]:
     def decorator(func: CheckFunc) -> CheckFunc:
         if name in _REGISTRY:
             raise ValueError(
                 f"check {name} 重复注册-第二次出现在 {func.__module__}.{func.__name__}"
             )
-        _REGISTRY[name] = CheckEntry(name=name, func=func)
+        _REGISTRY[name] = CheckEntry(name=name, func=func, order=order)
         return func
 
     return decorator
 
 
-# 兼容之前的命名
 register_check = check
-
-
-# 自动import - 加新的check不改框架代码的物理基础
 _LAZY_INITIALIZED = False
 
 
 def _lazy_init() -> None:
-    """扫描 checks/*.py 自动触发 @register。
-
-    - 跳过 _ 开头的私有模块。
-    - 标志位放在 import 全部成功【之后】, 任何 import 失败都不污染状态, 下次可重试。
-    """
+    """Import checks package once and trigger decorators."""
 
     global _LAZY_INITIALIZED
     if _LAZY_INITIALIZED:
@@ -110,12 +156,9 @@ def _lazy_init() -> None:
     _LAZY_INITIALIZED = True
 
 
-# 定义查询的API
 def get_all_checks() -> List[CheckEntry]:
-    """返回全部注册的check"""
-
     _lazy_init()
-    return list(_REGISTRY.values())
+    return sorted(_REGISTRY.values(), key=lambda entry: (entry.order, entry.name))
 
 
 def get_check(name: str) -> CheckEntry:
@@ -126,13 +169,10 @@ def get_check(name: str) -> CheckEntry:
 
 
 def list_check_names() -> List[str]:
-    """返回已经注册的名字列表"""
-
     _lazy_init()
-    return list(_REGISTRY.keys())
+    return [entry.name for entry in get_all_checks()]
 
 
-# 兼容之前的命名
 def list_checks() -> List[str]:
     return list_check_names()
 

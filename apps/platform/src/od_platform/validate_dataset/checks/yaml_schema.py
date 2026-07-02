@@ -4,77 +4,21 @@
 # @Time      :2026/7/2 13:01:52
 # @Author    :雨霓同学
 # @Project   :ODPlatform
-# @Function  :
-"""
-yaml_schema check: 验证数据集 yaml 文件的字段完整性和一致性
-
-检查项: 任意一项失败都要标记 ERROR
-    1. yaml 文件存在而且要能解析
-    2. yaml 文件的顶层必须是一个字典
-    3. 包含 nc 字段, 且是正整数
-    4. 包含 names 字段, 且是字符串列表, 或者是一个字典
-    5. nc 字段的值等于 names 字段中元素个数
-"""
+# @Function  :yaml schema validation
 
 from __future__ import annotations
 
 from typing import Any
 
-import yaml
-
-from od_platform.validate_dataset.registry import (
-    CheckContext,
-    CheckResult,
-    CheckSeverity,
-    check,
-)
+from od_platform.validate_dataset.checks._shared import load_yaml_doc_or_error
+from od_platform.validate_dataset.registry import CheckContext, CheckResult, CheckSeverity, check
 
 
-@check("yaml_schema")
+@check("yaml_schema", order=10)
 def validate_yaml_schema(ctx: CheckContext) -> CheckResult:
-    yaml_path = ctx.yaml_path
-
-    if not yaml_path.exists():
-        return CheckResult(
-            name="yaml_schema",
-            severity=CheckSeverity.ERROR,
-            summary=f"yaml 文件不存在: {yaml_path}",
-            details={"reason": "file_not_found", "yaml_path": str(yaml_path)},
-        )
-
-    try:
-        with yaml_path.open("r", encoding="utf-8") as file:
-            cfg = yaml.safe_load(file)
-    except yaml.YAMLError as exc:
-        return CheckResult(
-            name="yaml_schema",
-            severity=CheckSeverity.ERROR,
-            summary=f"yaml 文件解析失败: {exc}",
-            details={
-                "reason": "parse_error",
-                "yaml_path": str(yaml_path),
-                "parser_error": str(exc),
-            },
-        )
-    except OSError as exc:
-        return CheckResult(
-            name="yaml_schema",
-            severity=CheckSeverity.ERROR,
-            summary=f"yaml 文件读取失败: {exc}",
-            details={
-                "reason": "read_error",
-                "yaml_path": str(yaml_path),
-                "os_error": str(exc),
-            },
-        )
-
-    if not isinstance(cfg, dict):
-        return CheckResult(
-            name="yaml_schema",
-            severity=CheckSeverity.ERROR,
-            summary=f"yaml 文件的顶层不是字典: {type(cfg).__name__}",
-            details={"reason": "not_dict", "actual_type": type(cfg).__name__},
-        )
+    cfg, error = load_yaml_doc_or_error(ctx, "yaml_schema")
+    if error is not None:
+        return error
 
     problems: list[str] = []
 
@@ -89,9 +33,12 @@ def validate_yaml_schema(ctx: CheckContext) -> CheckResult:
         problems.append(names_problem)
 
     if nc is not None and names_count is not None and nc != names_count:
-        problems.append(
-            f"nc 字段的值({nc})与 names 字段中元素个数({names_count})不相等"
-        )
+        problems.append(f"nc 字段的值({nc})与 names 字段中元素个数({names_count})不相等")
+
+    for field_name in ("path", "train", "val", "test"):
+        value = cfg.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            problems.append(f"{field_name} 字段不存在或者不是非空字符串: {value}")
 
     if problems:
         return CheckResult(

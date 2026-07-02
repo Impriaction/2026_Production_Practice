@@ -19,3 +19,6 @@ results = run_all_checks(ctx)
 
 for result in results:
     print(result.severity, result.name, "-", result.summary)
+    if result.details.get("problems"):
+        for problem in result.details["problems"]:
+            print(f"  - {problem}")
